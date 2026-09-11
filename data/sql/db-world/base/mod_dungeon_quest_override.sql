@@ -23,3 +23,6 @@ CREATE TABLE IF NOT EXISTS `mod_dungeon_quest_override` (
     `action` TINYINT NOT NULL DEFAULT 1 COMMENT '1 = force include, 0 = force exclude',
     PRIMARY KEY (`map_id`, `quest_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Dungeon quest discovery manual overrides (mod-dungeon-quests)';
+
+-- Intentionally no INSERT, UPDATE, REPLACE, DELETE or TRUNCATE of override rows.
+-- Repeated execution only ensures the table exists; administrator contents survive.

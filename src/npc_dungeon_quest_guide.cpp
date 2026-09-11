@@ -94,7 +94,7 @@ void ShowMenu(Player* player, Creature* creature, uint32 page = 0)
     std::size_t begin = static_cast<std::size_t>(page) * PageSize;
     std::size_t end = std::min(begin + PageSize, quests.size());
     for (std::size_t index = begin; index < end; ++index)
-        AddGossipItemFor(player, GOSSIP_ICON_CHAT, sDungeonQuestMgr->GetQuestTitle(quests[index]),
+        AddGossipItemFor(player, GOSSIP_ICON_DOT, sDungeonQuestMgr->GetQuestTitle(quests[index]),
             QuestSender, quests[index]);
 
     if (page > 0)
