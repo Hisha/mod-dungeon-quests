@@ -3,7 +3,9 @@
 #include "Config.h"
 #include "DBCStores.h"
 #include "DatabaseEnv.h"
+#include "Field.h"
 #include "Log.h"
+#include "QueryResult.h"
 
 #include <algorithm>
 #include <string>
