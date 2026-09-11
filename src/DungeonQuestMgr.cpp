@@ -153,15 +153,11 @@ void DungeonQuestMgr::DiscoverDungeons()
 
 void DungeonQuestMgr::LoadSpawns()
 {
-    // AzerothCore's creature table stores up to five alternate spawn entries
-    // per row (id1..id5). Union them all so spawns referencing an aliased entry
-    // still count toward the map's creature set.
+    // AzerothCore's creature table stores the creature template entry in `id`.
+    // Load the distinct creature entries spawned on each map, then retain only
+    // entries belonging to dungeon maps below.
     QueryResult creatures = WorldDatabase.Query(
-        "SELECT DISTINCT `map`, `id1` FROM `creature` WHERE `id1` != 0 "
-        "UNION SELECT DISTINCT `map`, `id2` FROM `creature` WHERE `id2` != 0 "
-        "UNION SELECT DISTINCT `map`, `id3` FROM `creature` WHERE `id3` != 0 "
-        "UNION SELECT DISTINCT `map`, `id4` FROM `creature` WHERE `id4` != 0 "
-        "UNION SELECT DISTINCT `map`, `id5` FROM `creature` WHERE `id5` != 0");
+        "SELECT DISTINCT `map`, `id` FROM `creature` WHERE `id` != 0");
 
     if (creatures)
     {
