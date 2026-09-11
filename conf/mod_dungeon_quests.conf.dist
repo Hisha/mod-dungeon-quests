@@ -1,0 +1,16 @@
+#
+# mod-dungeon-quests
+#
+# Automatically discovers which world quests belong to each AzerothCore
+# WotLK dungeon map and caches the mapping in memory. A later pass adds the
+# reusable Dungeon Quest Guide NPC that consumes these cached mappings.
+
+# DungeonQuests.Enable
+#   Enables automatic dungeon quest discovery.
+#   Default: 1
+DungeonQuests.Enable = 1
+
+# DungeonQuests.Debug
+#   Logs individual quest membership decisions during discovery/reload.
+#   Default: 0
+DungeonQuests.Debug = 0
