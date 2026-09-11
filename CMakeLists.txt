@@ -1,5 +1,6 @@
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/DungeonQuestMgr.cpp")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/DungeonQuestMgr.h")
 AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/mod_dungeon_quests.cpp")
+AC_ADD_SCRIPT("${CMAKE_CURRENT_LIST_DIR}/src/npc_dungeon_quest_guide.cpp")
 AC_ADD_SCRIPT_LOADER("DungeonQuests" "${CMAKE_CURRENT_LIST_DIR}/src/loader.h")
 AC_ADD_CONFIG_FILE("${CMAKE_CURRENT_LIST_DIR}/conf/mod_dungeon_quests.conf.dist")

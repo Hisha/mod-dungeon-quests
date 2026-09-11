@@ -5,15 +5,14 @@ dungeon entrances. The guide automatically determines which quests belong to the
 player is standing in and offers only the quests that player is legitimately eligible to accept —
 without requiring administrators to hand-maintain a `map_id -> quest_id` table.
 
-> **Status: Pass 1 (foundation only).** This revision implements the `DungeonQuestMgr` discovery
-> subsystem, the in-memory caching, manual overrides, and two diagnostic commands. The NPC script,
-> gossip menus, quest eligibility UI, and "Accept All" are deliberately **not** implemented yet;
-> they consume `DungeonQuestMgr`'s cached results. See *Roadmap* below.
+> **Status: Pass 2 implementation.** Reusable guide, player eligibility, individual acceptance,
+> optional Accept All, and one Deadmines test spawn. See `PASS2_REPORT.md` for actual validation
+> results and remaining in-game checks.
 
 ## Purpose
 
 Dungeon quests in WotLK are scattered across the world: starters in cities, objectives inside an
-instance, turn-ins back outside. This module places one neutral guide NPC inside each dungeon whose
+instance, turn-ins back outside. This pass places one neutral guide NPC inside Deadmines whose
 gossip lists that dungeon's quests, so a group can pick them up on arrival.
 
 Unlike classic quest-giver relations (`creature_queststarter`), the module derives which quests
@@ -28,9 +27,11 @@ levels, faction, race, class, completion state, or quest-log capacity.
    DungeonQuestMgr.h            manager API (singleton, cached lookup)
    DungeonQuestMgr.cpp          discovery pipeline + override loading + membership math
    mod_dungeon_quests.cpp       WorldScript (config + startup/reload) + diagnostic commands
+   npc_dungeon_quest_guide.cpp  dynamic gossip + normal quest acceptance
    loader.h                     AzerothCore script loader entry point
  conf/mod_dungeon_quests.conf.dist
  data/sql/db-world/base/mod_dungeon_quest_override.sql
+ data/sql/db-world/base/mod_dungeon_quest_guide.sql
 ```
 
 `DungeonQuestMgr` is the only component that touches the world database for discovery. It runs once
@@ -43,10 +44,10 @@ at server startup (or an explicit reload) and caches everything in memory:
 - inverted `creature_queststarter` / `creature_questender` relations
 - validated manual overrides
 
-Gossip (in a later pass) calls `sDungeonQuestMgr->GetDungeonQuests(mapId)` and performs the normal
+Gossip calls `sDungeonQuestMgr->GetDungeonQuests(mapId)` and performs the normal
 per-player eligibility checks. No expensive database joins run while a player talks to the NPC.
 
-### Interfices
+### Interfaces
 - `GetDungeonQuests(mapId)` — final quest list for a dungeon (auto, minus excludes, plus includes).
 - `GetDiscoveredQuests(mapId)` — auto-discovered list, before overrides.
 - `IsDungeonMap(mapId)` — is this map tracked as a dungeon (or force-include target)?
@@ -127,9 +128,11 @@ discovery did not classify as dungeons.
 ```
 DungeonQuests.Enable = 1
 DungeonQuests.Debug  = 0
+DungeonQuests.EnableAcceptAll = 1
 ```
 
-- `Enable` — turns automatic discovery on/off.
+- `Enable` — turns automatic discovery and guide acceptance on/off.
+- `EnableAcceptAll` — shows the batch-accept option; cached on config load/reload.
 - `Debug` — logs individual quest membership decisions during discovery/reload. Leave off in
   production; it is noisy by design.
 
@@ -149,9 +152,9 @@ DungeonQuests.Debug  = 0
 
 Both require administrator rights and work from the console.
 
-## NPC behavior (planned, next pass)
+## NPC behavior
 
-The reusable `npc_dungeon_quest_guide` script will:
+The reusable `npc_dungeon_quest_guide` script:
 
 1. Read the player's current map and fetch `GetDungeonQuests(mapId)`.
 2. If no mapping exists: *"No dungeon quests are known for this location."*
@@ -165,11 +168,36 @@ take it is always answered by AzerothCore's standard eligibility APIs. Quest cha
 later quest in a chain is offered only when the core considers the player eligible, so prerequisites
 are never auto-granted.
 
-## Adding NPC entrance spawns (planned, later pass)
+## Installing the guide
 
-The first implementation ships one example dungeon spawn for testing. Entrance positions for all
-dungeons will follow in a dedicated pass once the runtime system is verified, using this module's own
-reserved creature entry / GUID ranges so they never collide with normal AzerothCore data.
+Apply the changed files to the module, rebuild worldserver, and import
+`data/sql/db-world/base/mod_dungeon_quest_guide.sql` into the **world** database while worldserver
+is stopped. Preserve your real `.conf` settings and add `DungeonQuests.EnableAcceptAll = 1` there.
+The distributed `.conf.dist` does not overwrite an existing configuration.
+
+The SQL targets **creature.id**, the supplied live schema. Entry **14999991** uses WotLK display
+**5233** (Spirit Healer appearance), faction 35 and gossip-only NPC flags. The only test spawn is
+map **36**, **(-16.4, -383.07, 61.78)**, orientation **1.86**, from the core's Deadmines entrance
+teleport destination (areatrigger 78). Verify placement in game before moving beyond this test.
+The spawn GUID is allocated by the database. No static queststarter/questender relations are added.
+
+Check entry 14999991 in your live world database before importing. SQL does not overwrite an
+occupied template or model; a conflicting identity skips installation and prints a result message.
+An already installed guide is retained; the map-36 spawn is not duplicated on rerun. Run imports
+serially, with no concurrent world-data writers.
+
+The guide uses `GetQuestStatus` and `IsQuestRewarded`, then `CanTakeQuest(quest, false)` and
+`CanAddQuest(quest, false)`. Selection checks current-map membership and repeats eligibility
+immediately before `AddQuestAndCheckCompletion(quest, creature)`. Batch acceptance snapshots all
+currently eligible quests across pages and revalidates each; it skips cleanly when capacity is lost.
+Menus show 24 quests per page to fit the core's gossip limit.
+
+Previously rewarded repeatable quests are intentionally hidden, as required by this pass; the core
+itself normally permits some repeatables again. Disabled quests are rejected through `CanTakeQuest`.
+A test/development quest that passes normal core eligibility can still appear: there is no title-based
+filter or C++ blacklist. Correct such membership using the existing force-exclude override table.
+Quest-specific behavior tied to the original questgiver still needs in-game validation; the guide
+does not impersonate or spawn the original questgiver or grant prerequisite quests.
 
 ## Troubleshooting / debug mode
 
@@ -190,18 +218,14 @@ reserved creature entry / GUID ranges so they never collide with normal AzerothC
   starters live outside the instance, may produce no matches (for example wilderness-camped quest
   chains). Use a force-include override for these.
 - **Shared drops** can attach an occasional borderline world quest to a dungeon.
-- **Creature aliases** (`id2..id5`) are unioned in, but the query cannot know which alias is active
-  in a given instance script; a spell-visual alias shared with an outdoor mob may add a quest.
 - **Raid content is not discovered** in this pass.
 - **Membership is derived, not gospel.** It is a proxy signal and can produce both false positives
   (use force-exclude) and false negatives (use force-include).
 
-## Roadmap
+## Next step
 
-1. *(this pass)* `DungeonQuestMgr`: discovery, caching, overrides, stats, diagnostic commands.
-2. NPC script + gossip + per-player eligibility + individual accept.
-3. **Accept All Available Quests** with quest-log-capacity handling.
-4. NPC SQL with one example dungeon spawn, then entrance spawns for all 5-man dungeons.
+Validate the single Deadmines guide in game using `PASS2_REPORT.md`. Additional dungeon spawns
+are outside this pass and should wait until gameplay is verified.
 
 ## Schema assumptions to verify on the actual server
 
@@ -212,26 +236,18 @@ be re-verified against the live world DB on first deployment:
 | Table | Columns used | Notes |
 | --- | --- | --- |
 | `instance_template` | `map` | instance map id set |
-| `creature` | `map`, `id1..id5` | AC multi-entry spawn columns |
+| `creature` | `map`, `id` | Supplied live Playerbot schema; preserved |
 | `gameobject` | `map`, `id` | |
 | `creature_loot_template` / `gameobject_loot_template` | `Entry`, `Item`, `QuestRequired` | quest-gated drop filter |
 | `quest_template` | `ID`, `LogTitle`, `RequiredNpcOrGo1..4`, `RequiredItemId1..6` | signed `RequiredNpcOrGo` |
 | `creature_queststarter` / `creature_questender` | `id`, `quest` | |
 | `mod_dungeon_quest_override` | `map_id`, `quest_id`, `action` | module-owned table |
 
-## Build status
+## Validation status
 
-This repository is written and reviewed in isolation; **the AzerothCore worldserver build was not
-available locally, so this module has not been compiled against AzerothCore.** Items most likely to
-need a one-line fix on the target machine:
-
-- `MapEntry::IsNonRaidDungeon()` (DBC map classification) — confirm the exact `MapEntry` accessor on
-  the installed core.
-- The `creature.id1..id5` multi-entry columns — confirm the world DB headers before first load.
-- AzerothCore command-table and `WorldScript` hook signatures if the installed core branch differs.
-
-If the installed core differs from current WotLK `master`/Playerbot, the SQL in *Schema assumptions*
-should be diffed against `world` before relying on the discovery output.
+See `PASS2_REPORT.md` for the exact core revision, build results, limitations and deployment
+checklist. The live server's previously reported 52 maps / 326 mappings is a baseline supplied by
+the operator, not a new runtime result from this pass. Discovery source remains unchanged.
 
 ## License
 

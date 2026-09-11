@@ -5,6 +5,9 @@
 #include "ScriptMgr.h"
 #include "SharedDefines.h"
 
+void LoadDungeonQuestGuideConfig();
+void AddSC_npc_dungeon_quest_guide();
+
 using namespace Acore::ChatCommands;
 
 namespace
@@ -21,6 +24,7 @@ public:
     void OnAfterConfigLoad(bool reload) override
     {
         sDungeonQuestMgr->LoadConfig();
+        LoadDungeonQuestGuideConfig();
         if (reload && sDungeonQuestMgr->IsEnabled())
             sDungeonQuestMgr->Reload();
     }
@@ -120,4 +124,5 @@ void AddSC_DungeonQuests()
 {
     new dungeon_quests_worldscript();
     new dungeon_quests_commandscript();
+    AddSC_npc_dungeon_quest_guide();
 }
