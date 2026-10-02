@@ -26,6 +26,12 @@ establishes whether this player can accept a quest now.
 - Menus show up to 24 quests per page. Active quests disappear; abandoning a quest makes it available
   again if the core permits it. Previously rewarded quests, including repeatables, remain hidden.
 
+Quests whose starter stands inside the dungeon and runs a script on accept are left to that starter:
+escort and event quests (`SpecialFlags & 2`), starters with a `ScriptName`, and starters with a SmartAI
+`ACCEPTED_QUEST` event. Taken from the guide, such a quest would never start its escort or event and
+could not be completed (for example **Jail Break!** in Blackrock Depths). A force-include override still
+adds one back. `.dungeonquest list` shows them as `SCRIPTED START`.
+
 This is a convenience gossip NPC, not a native questgiver. There are no static queststarter relations,
 no automatic granting on dungeon entry, and no universal turn-ins. Complete and turn in quests through
 the original game NPCs.
@@ -148,7 +154,7 @@ workflow after changing settings or override data. No extra release-specific set
 
 ## Administrator commands
 
-- `.dungeonquest stats` reports discovered maps, quest mappings and override counts.
+- `.dungeonquest stats` reports discovered maps, quest mappings, scripted starts and override counts.
 - `.dungeonquest list [mapId]` lists cached mappings and override annotations; it uses the current map
   if omitted by an in-game administrator. Example: `.dungeonquest list 36`.
 
