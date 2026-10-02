@@ -3,13 +3,16 @@
 #include "Creature.h"
 #include "DungeonQuestMgr.h"
 #include "ObjectMgr.h"
+#include "Map.h"
 #include "Player.h"
 #include "PoolMgr.h"
 #include "QuestDef.h"
 #include "ScriptMgr.h"
+#include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -23,6 +26,8 @@ constexpr uint32 AcceptAllAction = 1;
 constexpr uint32 GoodbyeAction = 2;
 // Leave room for previous/next, accept-all and goodbye below the core's 32-item limit.
 constexpr uint32 PageSize = 24;
+// How far the guide steps off the arrival point, so players do not appear inside it.
+constexpr float ArrivalOffset = 3.0f;
 
 enum GuideText
 {
@@ -172,6 +177,43 @@ class npc_dungeon_quest_guide : public CreatureScript
 {
 public:
     npc_dungeon_quest_guide() : CreatureScript("npc_dungeon_quest_guide") { }
+
+    struct npc_dungeon_quest_guideAI : public ScriptedAI
+    {
+        npc_dungeon_quest_guideAI(Creature* creature) : ScriptedAI(creature) { }
+
+        // Spawn rows sit exactly on the instance arrival point. Before anyone can
+        // see the guide, step it forward along the arrival facing (stopping at
+        // walls, snapped to the ground) and turn it back toward the arrival.
+        void InitializeAI() override
+        {
+            CreatureData const* data = me->GetCreatureData();
+            if (data && me->IsInWorld())
+            {
+                Position arrival(data->posX, data->posY, data->posZ, data->orientation);
+                Position pos = arrival;
+                me->Relocate(arrival);
+                me->MovePositionToFirstCollision(pos, ArrivalOffset, 0.0f);
+
+                // Small moves only, and never across a cell border: Relocate does not regrid.
+                if (arrival.GetExactDist2d(&pos) > 1.0f && std::fabs(pos.GetPositionZ() - arrival.GetPositionZ()) < 3.0f
+                    && Acore::ComputeCellCoord(arrival.GetPositionX(), arrival.GetPositionY())
+                        == Acore::ComputeCellCoord(pos.GetPositionX(), pos.GetPositionY()))
+                {
+                    pos.SetOrientation(pos.GetAngle(&arrival));
+                    me->Relocate(pos);
+                    me->SetHomePosition(pos);
+                }
+            }
+
+            ScriptedAI::InitializeAI();
+        }
+    };
+
+    CreatureAI* GetAI(Creature* creature) const override
+    {
+        return new npc_dungeon_quest_guideAI(creature);
+    }
 
     bool OnGossipHello(Player* player, Creature* creature) override
     {

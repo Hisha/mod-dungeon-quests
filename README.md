@@ -55,7 +55,9 @@ Normal and heroic variants use the recorded spawn masks rather than duplicate ro
 
 See [DUNGEON_GUIDE_SPAWNS.md](DUNGEON_GUIDE_SPAWNS.md) for every coordinate, source and per-map count.
 The discovered set contains 52 maps, but **map 44 — <unused> Monastery** has no trustworthy arrival
-and intentionally has no guide. Placement rows use audited arrival positions; inspect them against
+and intentionally has no guide. Placement rows use audited arrival positions. So that players do not appear inside the guide, it steps
+3 yards forward along the arrival facing when it is added to the map (stopping at walls and snapped to
+the ground, never across a grid cell) and turns back toward the arrival point. Inspect the result against
 your server's geometry and teleport data before making small manual adjustments.
 
 ## Requirements
