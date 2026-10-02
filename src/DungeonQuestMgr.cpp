@@ -62,6 +62,8 @@ void DungeonQuestMgr::Clear()
     _dungeonMaps.clear();
     _mapCreatures.clear();
     _mapGameObjects.clear();
+    _creatureLootIds.clear();
+    _gameObjectLootIds.clear();
     _creatureQuestLoot.clear();
     _gameObjectQuestLoot.clear();
     _mapQuestLootItems.clear();
@@ -209,6 +211,31 @@ void DungeonQuestMgr::LoadSpawns()
 
 void DungeonQuestMgr::LoadQuestLoot()
 {
+    // Loot tables are keyed by loot id, not by template entry: creature_template.lootid
+    // usually equals the entry but not always, and a chest's loot id lives in Data1.
+    QueryResult creatureIds = WorldDatabase.Query(
+        "SELECT `entry`, `lootid` FROM `creature_template` WHERE `lootid` != 0");
+    if (creatureIds)
+    {
+        do
+        {
+            Field* fields = creatureIds->Fetch();
+            _creatureLootIds[fields[0].Get<uint32>()] = fields[1].Get<uint32>();
+        } while (creatureIds->NextRow());
+    }
+
+    // GAMEOBJECT_TYPE_CHEST (3) and GAMEOBJECT_TYPE_FISHINGHOLE (25) keep the loot id in Data1.
+    QueryResult goIds = WorldDatabase.Query(
+        "SELECT `entry`, `Data1` FROM `gameobject_template` WHERE `type` IN (3, 25) AND `Data1` != 0");
+    if (goIds)
+    {
+        do
+        {
+            Field* fields = goIds->Fetch();
+            _gameObjectLootIds[fields[0].Get<uint32>()] = fields[1].Get<uint32>();
+        } while (goIds->NextRow());
+    }
+
     // Only QuestRequired = 1 ("quest item" style) drops are considered. Generic
     // trash loot (cloth, herbs, ore) must not pull unrelated collection quests
     // into every dungeon. This mirrors the filtering used by the reference
@@ -255,7 +282,10 @@ void DungeonQuestMgr::LoadQuestLoot()
         {
             for (uint32 entry : creatureIt->second)
             {
-                auto const lootIt = _creatureQuestLoot.find(entry);
+                auto const idIt = _creatureLootIds.find(entry);
+                if (idIt == _creatureLootIds.end())
+                    continue;
+                auto const lootIt = _creatureQuestLoot.find(idIt->second);
                 if (lootIt != _creatureQuestLoot.end())
                     mapItems.insert(lootIt->second.begin(), lootIt->second.end());
             }
@@ -266,7 +296,10 @@ void DungeonQuestMgr::LoadQuestLoot()
         {
             for (uint32 entry : goIt->second)
             {
-                auto const lootIt = _gameObjectQuestLoot.find(entry);
+                auto const idIt = _gameObjectLootIds.find(entry);
+                if (idIt == _gameObjectLootIds.end())
+                    continue;
+                auto const lootIt = _gameObjectQuestLoot.find(idIt->second);
                 if (lootIt != _gameObjectQuestLoot.end())
                     mapItems.insert(lootIt->second.begin(), lootIt->second.end());
             }

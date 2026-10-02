@@ -74,7 +74,11 @@ private:
     std::unordered_map<uint32, std::unordered_set<uint32>> _mapCreatures;
     std::unordered_map<uint32, std::unordered_set<uint32>> _mapGameObjects;
 
-    // Quest-gated loot (QuestRequired=1), keyed by dropping source entry.
+    // Template entry -> loot table id (creature_template.lootid, chest/fishing hole Data1).
+    std::unordered_map<uint32, uint32> _creatureLootIds;
+    std::unordered_map<uint32, uint32> _gameObjectLootIds;
+
+    // Quest-gated loot (QuestRequired=1), keyed by loot table id.
     std::unordered_map<uint32, std::unordered_set<uint32>> _creatureQuestLoot;
     std::unordered_map<uint32, std::unordered_set<uint32>> _gameObjectQuestLoot;
 
