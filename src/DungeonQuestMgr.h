@@ -15,6 +15,7 @@ struct DungeonQuestStats
     uint32 ForceIncluded = 0;        // valid force-include overrides applied
     uint32 ForceExcluded = 0;        // valid force-exclude overrides applied
     uint32 InvalidOverrides = 0;     // invalid override rows logged and skipped
+    uint32 ScriptedExcluded = 0;     // scripted/escort quests left to their in-dungeon starter
 };
 
 class DungeonQuestMgr
@@ -46,6 +47,8 @@ public:
 
     bool IsForceIncluded(uint32 mapId, uint32 questId) const;
     bool IsForceExcluded(uint32 mapId, uint32 questId) const;
+    bool IsScriptedExcluded(uint32 mapId, uint32 questId) const;
+    std::vector<uint32> GetScriptedExcluded(uint32 mapId) const;
 
     DungeonQuestStats const& GetStats() const { return _stats; }
 
@@ -59,6 +62,8 @@ private:
     void LoadQuestLoot();
     void LoadQuestObjectives();
     void LoadQuestRelations();
+    void LoadScriptedStarters();
+    bool IsScriptedStart(uint32 questId, std::unordered_set<uint32> const& mapCreatures) const;
     void LoadOverrides();
     void ComputeMemberships();
     void ApplyOverrides();
@@ -74,7 +79,11 @@ private:
     std::unordered_map<uint32, std::unordered_set<uint32>> _mapCreatures;
     std::unordered_map<uint32, std::unordered_set<uint32>> _mapGameObjects;
 
-    // Quest-gated loot (QuestRequired=1), keyed by dropping source entry.
+    // Template entry -> loot table id (creature_template.lootid, chest/fishing hole Data1).
+    std::unordered_map<uint32, uint32> _creatureLootIds;
+    std::unordered_map<uint32, uint32> _gameObjectLootIds;
+
+    // Quest-gated loot (QuestRequired=1), keyed by loot table id.
     std::unordered_map<uint32, std::unordered_set<uint32>> _creatureQuestLoot;
     std::unordered_map<uint32, std::unordered_set<uint32>> _gameObjectQuestLoot;
 
@@ -94,6 +103,14 @@ private:
     // Inverted creature_queststarter / creature_questender: quest -> creature entries.
     std::unordered_map<uint32, std::unordered_set<uint32>> _startersByQuest;
     std::unordered_map<uint32, std::unordered_set<uint32>> _endersByQuest;
+
+    // Starters whose quest accept runs a script (escorts, summons, events).
+    std::unordered_set<uint32> _scriptedCreatures;                          // creature_template.ScriptName set
+    std::unordered_map<uint32, std::unordered_set<uint32>> _saiAcceptQuests; // SAI ACCEPTED_QUEST, 0 = any
+    std::unordered_set<uint32> _eventQuests;                                // SpecialFlags EXPLORATION_OR_EVENT
+
+    // Quests found on a map but left to their scripted in-dungeon starter.
+    std::unordered_map<uint32, std::unordered_set<uint32>> _scriptedExcluded;
 
     // Per-map auto-discovered quest ids.
     std::unordered_map<uint32, std::unordered_set<uint32>> _autoDiscovered;

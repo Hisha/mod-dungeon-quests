@@ -64,6 +64,7 @@ private:
         handler->PSendSysMessage("Dungeon quest discovery:");
         handler->PSendSysMessage("{} dungeon maps", stats.DungeonCount);
         handler->PSendSysMessage("{} auto-discovered quest mappings", stats.DiscoveredMappings);
+        handler->PSendSysMessage("{} scripted quests left to their in-dungeon starter", stats.ScriptedExcluded);
         handler->PSendSysMessage("{} force-includes", stats.ForceIncluded);
         handler->PSendSysMessage("{} force-excludes", stats.ForceExcluded);
         if (stats.InvalidOverrides != 0)
@@ -107,6 +108,10 @@ private:
                 ? "EXCLUDED OVERRIDE" : "AUTO";
             handler->PSendSysMessage("  {} ({}): {}", questId, sDungeonQuestMgr->GetQuestTitle(questId), tag);
         }
+
+        for (uint32 questId : sDungeonQuestMgr->GetScriptedExcluded(mapId))
+            handler->PSendSysMessage("  {} ({}): SCRIPTED START{}", questId, sDungeonQuestMgr->GetQuestTitle(questId),
+                sDungeonQuestMgr->IsForceIncluded(mapId, questId) ? ", INCLUDE OVERRIDE" : "");
 
         for (uint32 questId : finalQuests)
         {

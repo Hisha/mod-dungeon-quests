@@ -24,11 +24,24 @@ establishes whether this player can accept a quest now.
   respects capacity and reports how many were accepted.
 - **Accept All**, **Goodbye**, **Previous page** and **Next page** retain ordinary chat icons.
 - Menus show up to 24 quests per page. Active quests disappear; abandoning a quest makes it available
-  again if the core permits it. Previously rewarded quests, including repeatables, remain hidden.
+  again if the core permits it. Rewarded one-time quests stay hidden; repeatables return once the core's
+  daily/weekly limits allow them, and pooled quests (dungeon dailies) are offered only while active.
+
+Quests whose starter stands inside the dungeon and runs a script on accept are left to that starter:
+escort and event quests (`SpecialFlags & 2`), starters with a `ScriptName`, and starters with a SmartAI
+`ACCEPTED_QUEST` event. Taken from the guide, such a quest would never start its escort or event and
+could not be completed (for example **Jail Break!** in Blackrock Depths). A force-include override still
+adds one back. `.dungeonquest list` shows them as `SCRIPTED START`.
 
 This is a convenience gossip NPC, not a native questgiver. There are no static queststarter relations,
 no automatic granting on dungeon entry, and no universal turn-ins. Complete and turn in quests through
 the original game NPCs.
+
+## Localization
+
+Menu entries and chat messages are available in English and Russian (ruRU), chosen by the client locale.
+Quest titles come from `quest_template_locale`, and the guide's ruRU name and subtitle are installed by
+`mod_dungeon_quest_guide_locale.sql`.
 
 ## Guide placement and appearance
 
@@ -42,7 +55,9 @@ Normal and heroic variants use the recorded spawn masks rather than duplicate ro
 
 See [DUNGEON_GUIDE_SPAWNS.md](DUNGEON_GUIDE_SPAWNS.md) for every coordinate, source and per-map count.
 The discovered set contains 52 maps, but **map 44 — <unused> Monastery** has no trustworthy arrival
-and intentionally has no guide. Placement rows use audited arrival positions; inspect them against
+and intentionally has no guide. Placement rows use audited arrival positions. So that players do not appear inside the guide, it steps
+3 yards forward along the arrival facing when it is added to the map (stopping at walls and snapped to
+the ground, never across a grid cell) and turns back toward the arrival point. Inspect the result against
 your server's geometry and teleport data before making small manual adjustments.
 
 ## Requirements
@@ -79,8 +94,9 @@ If your server disables automatic database updates, stop worldserver and use you
 client to execute these **complete files**, in this order, against the **world** database:
 
 1. `data/sql/db-world/base/mod_dungeon_quest_guide.sql`
-2. `data/sql/db-world/base/mod_dungeon_quest_override.sql`
-3. `data/sql/db-world/updates/mod_dungeon_quests_2026_09_11_01_release.sql`
+2. `data/sql/db-world/base/mod_dungeon_quest_guide_locale.sql`
+3. `data/sql/db-world/base/mod_dungeon_quest_override.sql`
+4. `data/sql/db-world/updates/mod_dungeon_quests_2026_09_11_01_release.sql`
 
 For example, `mysql -u YOUR_DB_USER -p YOUR_WORLD_DATABASE < FILE.sql` executes a file and prompts
 for the password. Substitute the actual path for `FILE.sql`; no SQL statements need to be copied
@@ -119,6 +135,7 @@ recorded it. With automatic updates disabled, also execute the override-table fi
 data/sql/db-world/
   base/
     mod_dungeon_quest_guide.sql
+    mod_dungeon_quest_guide_locale.sql
     mod_dungeon_quest_override.sql
   updates/
     mod_dungeon_quests_2026_09_11_01_release.sql
@@ -148,7 +165,7 @@ workflow after changing settings or override data. No extra release-specific set
 
 ## Administrator commands
 
-- `.dungeonquest stats` reports discovered maps, quest mappings and override counts.
+- `.dungeonquest stats` reports discovered maps, quest mappings, scripted starts and override counts.
 - `.dungeonquest list [mapId]` lists cached mappings and override annotations; it uses the current map
   if omitted by an in-game administrator. Example: `.dungeonquest list 36`.
 
@@ -178,7 +195,6 @@ exceptional cases.
 
 - Discovery is evidence-based and can have false positives/negatives, especially with shared items
   and dynamically spawned objectives. It does not create prerequisite chains or replace original NPC scripts.
-- Previously rewarded repeatables remain hidden under the existing guide policy.
 - Starting-item inventory checks can produce normal core equip-error messages.
 - There are no guides for raids, and unused map 44 remains unresolved.
 - Check different entrances, normal/heroic visibility and local teleport differences against the manifest.

@@ -62,6 +62,8 @@ void DungeonQuestMgr::Clear()
     _dungeonMaps.clear();
     _mapCreatures.clear();
     _mapGameObjects.clear();
+    _creatureLootIds.clear();
+    _gameObjectLootIds.clear();
     _creatureQuestLoot.clear();
     _gameObjectQuestLoot.clear();
     _mapQuestLootItems.clear();
@@ -69,6 +71,10 @@ void DungeonQuestMgr::Clear()
     _questTitles.clear();
     _startersByQuest.clear();
     _endersByQuest.clear();
+    _scriptedCreatures.clear();
+    _saiAcceptQuests.clear();
+    _eventQuests.clear();
+    _scriptedExcluded.clear();
     _autoDiscovered.clear();
     _forceInclude.clear();
     _forceExclude.clear();
@@ -98,13 +104,14 @@ void DungeonQuestMgr::Load()
     LoadQuestLoot();
     LoadQuestObjectives();
     LoadQuestRelations();
+    LoadScriptedStarters();
     LoadOverrides();
     ComputeMemberships();
     ApplyOverrides();
 
     LOG_INFO("module", "[DungeonQuests] Discovery complete: {} dungeon map(s), {} auto-discovered quest mapping(s), "
-        "{} force-include(s), {} force-exclude(s), {} invalid override(s).",
-        _stats.DungeonCount, _stats.DiscoveredMappings, _stats.ForceIncluded,
+        "{} scripted quest(s) left to their starter, {} force-include(s), {} force-exclude(s), {} invalid override(s).",
+        _stats.DungeonCount, _stats.DiscoveredMappings, _stats.ScriptedExcluded, _stats.ForceIncluded,
         _stats.ForceExcluded, _stats.InvalidOverrides);
 }
 
@@ -209,6 +216,31 @@ void DungeonQuestMgr::LoadSpawns()
 
 void DungeonQuestMgr::LoadQuestLoot()
 {
+    // Loot tables are keyed by loot id, not by template entry: creature_template.lootid
+    // usually equals the entry but not always, and a chest's loot id lives in Data1.
+    QueryResult creatureIds = WorldDatabase.Query(
+        "SELECT `entry`, `lootid` FROM `creature_template` WHERE `lootid` != 0");
+    if (creatureIds)
+    {
+        do
+        {
+            Field* fields = creatureIds->Fetch();
+            _creatureLootIds[fields[0].Get<uint32>()] = fields[1].Get<uint32>();
+        } while (creatureIds->NextRow());
+    }
+
+    // GAMEOBJECT_TYPE_CHEST (3) and GAMEOBJECT_TYPE_FISHINGHOLE (25) keep the loot id in Data1.
+    QueryResult goIds = WorldDatabase.Query(
+        "SELECT `entry`, `Data1` FROM `gameobject_template` WHERE `type` IN (3, 25) AND `Data1` != 0");
+    if (goIds)
+    {
+        do
+        {
+            Field* fields = goIds->Fetch();
+            _gameObjectLootIds[fields[0].Get<uint32>()] = fields[1].Get<uint32>();
+        } while (goIds->NextRow());
+    }
+
     // Only QuestRequired = 1 ("quest item" style) drops are considered. Generic
     // trash loot (cloth, herbs, ore) must not pull unrelated collection quests
     // into every dungeon. This mirrors the filtering used by the reference
@@ -255,7 +287,10 @@ void DungeonQuestMgr::LoadQuestLoot()
         {
             for (uint32 entry : creatureIt->second)
             {
-                auto const lootIt = _creatureQuestLoot.find(entry);
+                auto const idIt = _creatureLootIds.find(entry);
+                if (idIt == _creatureLootIds.end())
+                    continue;
+                auto const lootIt = _creatureQuestLoot.find(idIt->second);
                 if (lootIt != _creatureQuestLoot.end())
                     mapItems.insert(lootIt->second.begin(), lootIt->second.end());
             }
@@ -266,7 +301,10 @@ void DungeonQuestMgr::LoadQuestLoot()
         {
             for (uint32 entry : goIt->second)
             {
-                auto const lootIt = _gameObjectQuestLoot.find(entry);
+                auto const idIt = _gameObjectLootIds.find(entry);
+                if (idIt == _gameObjectLootIds.end())
+                    continue;
+                auto const lootIt = _gameObjectQuestLoot.find(idIt->second);
                 if (lootIt != _gameObjectQuestLoot.end())
                     mapItems.insert(lootIt->second.begin(), lootIt->second.end());
             }
@@ -361,6 +399,72 @@ void DungeonQuestMgr::LoadQuestRelations()
 
     LOG_INFO("module", "[DungeonQuests] Loaded {} quest starter and {} quest ender relation map(s).",
         _startersByQuest.size(), _endersByQuest.size());
+}
+
+void DungeonQuestMgr::LoadScriptedStarters()
+{
+    QueryResult scripted = WorldDatabase.Query(
+        "SELECT `entry` FROM `creature_template` WHERE `ScriptName` != ''");
+    if (scripted)
+    {
+        do
+        {
+            _scriptedCreatures.insert(scripted->Fetch()[0].Get<uint32>());
+        } while (scripted->NextRow());
+    }
+
+    // SMART_EVENT_ACCEPTED_QUEST (19) on a creature template; param1 0 means any quest.
+    QueryResult sai = WorldDatabase.Query(
+        "SELECT `entryorguid`, `event_param1` FROM `smart_scripts` "
+        "WHERE `source_type` = 0 AND `event_type` = 19 AND `entryorguid` > 0");
+    if (sai)
+    {
+        do
+        {
+            Field* fields = sai->Fetch();
+            _saiAcceptQuests[fields[0].Get<int32>()].insert(fields[1].Get<uint32>());
+        } while (sai->NextRow());
+    }
+
+    // Escort and event quests complete through a script event (QUEST_SPECIAL_FLAGS_EXPLORATION_OR_EVENT).
+    QueryResult events = WorldDatabase.Query(
+        "SELECT `ID` FROM `quest_template_addon` WHERE (`SpecialFlags` & 2) != 0");
+    if (events)
+    {
+        do
+        {
+            _eventQuests.insert(events->Fetch()[0].Get<uint32>());
+        } while (events->NextRow());
+    }
+
+    LOG_INFO("module", "[DungeonQuests] Loaded {} scripted creature(s), {} SAI quest-accept starter(s), {} event quest(s).",
+        _scriptedCreatures.size(), _saiAcceptQuests.size(), _eventQuests.size());
+}
+
+// A quest whose starter stands inside this dungeon and runs a script on accept
+// (escort, summon, event) only works when taken from that starter, so the guide
+// must not hand it out.
+bool DungeonQuestMgr::IsScriptedStart(uint32 questId, std::unordered_set<uint32> const& mapCreatures) const
+{
+    auto const starterIt = _startersByQuest.find(questId);
+    if (starterIt == _startersByQuest.end())
+        return false;
+
+    bool const eventQuest = _eventQuests.count(questId) != 0;
+    for (uint32 starter : starterIt->second)
+    {
+        if (!mapCreatures.count(starter))
+            continue;
+
+        if (eventQuest || _scriptedCreatures.count(starter))
+            return true;
+
+        auto const saiIt = _saiAcceptQuests.find(starter);
+        if (saiIt != _saiAcceptQuests.end() && (saiIt->second.count(questId) || saiIt->second.count(0)))
+            return true;
+    }
+
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -492,6 +596,16 @@ void DungeonQuestMgr::ComputeMemberships()
                 }
             }
 
+            if (belongs && IsScriptedStart(questId, creatures))
+            {
+                _scriptedExcluded[mapId].insert(questId);
+                ++_stats.ScriptedExcluded;
+                if (_debug)
+                    LOG_DEBUG("module", "[DungeonQuests] Scripted start, left to its NPC: map {} quest {} ('{}').",
+                        mapId, questId, GetQuestTitle(questId));
+                continue;
+            }
+
             if (belongs)
             {
                 hits.insert(questId);
@@ -586,4 +700,20 @@ bool DungeonQuestMgr::IsForceExcluded(uint32 mapId, uint32 questId) const
 {
     auto const it = _forceExclude.find(mapId);
     return it != _forceExclude.end() && it->second.count(questId) != 0;
+}
+
+bool DungeonQuestMgr::IsScriptedExcluded(uint32 mapId, uint32 questId) const
+{
+    auto const it = _scriptedExcluded.find(mapId);
+    return it != _scriptedExcluded.end() && it->second.count(questId) != 0;
+}
+
+std::vector<uint32> DungeonQuestMgr::GetScriptedExcluded(uint32 mapId) const
+{
+    std::vector<uint32> result;
+    auto const it = _scriptedExcluded.find(mapId);
+    if (it != _scriptedExcluded.end())
+        result.assign(it->second.begin(), it->second.end());
+    std::sort(result.begin(), result.end());
+    return result;
 }
