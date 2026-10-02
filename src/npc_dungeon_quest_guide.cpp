@@ -10,6 +10,7 @@
 #include "ScriptedGossip.h"
 
 #include <algorithm>
+#include <string>
 #include <vector>
 
 namespace
@@ -22,6 +23,61 @@ constexpr uint32 AcceptAllAction = 1;
 constexpr uint32 GoodbyeAction = 2;
 // Leave room for previous/next, accept-all and goodbye below the core's 32-item limit.
 constexpr uint32 PageSize = 24;
+
+enum GuideText
+{
+    TEXT_NO_QUESTS_KNOWN,
+    TEXT_NO_QUESTS_AVAILABLE,
+    TEXT_PREVIOUS_PAGE,
+    TEXT_NEXT_PAGE,
+    TEXT_ACCEPT_ALL,
+    TEXT_GOODBYE,
+    TEXT_NOT_ACCEPTED,
+    TEXT_ACCEPTED_COUNT,
+    TEXT_NONE_ACCEPTED,
+    TEXT_COUNT
+};
+
+char const* const GuideTextEn[TEXT_COUNT] =
+{
+    "No dungeon quests are known for this location.",
+    "You have no available quests for this dungeon.",
+    "Previous page",
+    "Next page",
+    "Accept All Available Quests",
+    "Goodbye",
+    "This quest could not be accepted.",
+    "{} dungeon quests accepted.",
+    "No dungeon quests could be accepted."
+};
+
+char const* const GuideTextRu[TEXT_COUNT] =
+{
+    "Для этого места заданий подземелья не найдено.",
+    "Доступных заданий этого подземелья нет.",
+    "Предыдущая страница",
+    "Следующая страница",
+    "Взять все доступные задания",
+    "До свидания",
+    "Не удалось взять это задание.",
+    "Взято заданий подземелья: {}.",
+    "Ни одно задание подземелья взять не удалось."
+};
+
+char const* Text(Player* player, GuideText id)
+{
+    return player->GetSession()->GetSessionDbLocaleIndex() == LOCALE_ruRU ? GuideTextRu[id] : GuideTextEn[id];
+}
+
+std::string QuestTitle(Player* player, uint32 questId)
+{
+    std::string title = sDungeonQuestMgr->GetQuestTitle(questId);
+    LocaleConstant locale = player->GetSession()->GetSessionDbLocaleIndex();
+    if (locale != LOCALE_enUS)
+        if (QuestLocale const* questLocale = sObjectMgr->GetQuestLocale(questId))
+            ObjectMgr::GetLocaleString(questLocale->Title, locale, title);
+    return title;
+}
 
 bool IsGuideAvailable(Player* player, Creature* creature)
 {
@@ -81,7 +137,7 @@ void ShowMenu(Player* player, Creature* creature, uint32 page = 0)
     if (!IsGuideAvailable(player, creature)
         || sDungeonQuestMgr->GetDungeonQuests(player->GetMapId()).empty())
     {
-        ChatHandler(player->GetSession()).SendSysMessage("No dungeon quests are known for this location.");
+        ChatHandler(player->GetSession()).SendSysMessage(Text(player, TEXT_NO_QUESTS_KNOWN));
         CloseGossipMenuFor(player);
         return;
     }
@@ -89,7 +145,7 @@ void ShowMenu(Player* player, Creature* creature, uint32 page = 0)
     std::vector<uint32> quests = GetEligibleQuests(player);
     if (quests.empty())
     {
-        ChatHandler(player->GetSession()).SendSysMessage("You have no available quests for this dungeon.");
+        ChatHandler(player->GetSession()).SendSysMessage(Text(player, TEXT_NO_QUESTS_AVAILABLE));
         CloseGossipMenuFor(player);
         return;
     }
@@ -99,16 +155,16 @@ void ShowMenu(Player* player, Creature* creature, uint32 page = 0)
     std::size_t begin = static_cast<std::size_t>(page) * PageSize;
     std::size_t end = std::min(begin + PageSize, quests.size());
     for (std::size_t index = begin; index < end; ++index)
-        AddGossipItemFor(player, GOSSIP_ICON_DOT, sDungeonQuestMgr->GetQuestTitle(quests[index]),
+        AddGossipItemFor(player, GOSSIP_ICON_DOT, QuestTitle(player, quests[index]),
             QuestSender, quests[index]);
 
     if (page > 0)
-        AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Previous page", PageSender, page - 1);
+        AddGossipItemFor(player, GOSSIP_ICON_CHAT, Text(player, TEXT_PREVIOUS_PAGE), PageSender, page - 1);
     if (page < lastPage)
-        AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Next page", PageSender, page + 1);
+        AddGossipItemFor(player, GOSSIP_ICON_CHAT, Text(player, TEXT_NEXT_PAGE), PageSender, page + 1);
     if (EnableAcceptAll)
-        AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Accept All Available Quests", ControlSender, AcceptAllAction);
-    AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Goodbye", ControlSender, GoodbyeAction);
+        AddGossipItemFor(player, GOSSIP_ICON_CHAT, Text(player, TEXT_ACCEPT_ALL), ControlSender, AcceptAllAction);
+    AddGossipItemFor(player, GOSSIP_ICON_CHAT, Text(player, TEXT_GOODBYE), ControlSender, GoodbyeAction);
     SendGossipMenuFor(player, DEFAULT_GOSSIP_MESSAGE, creature->GetGUID());
 }
 
@@ -141,7 +197,7 @@ public:
         if (sender == QuestSender)
         {
             if (!AcceptQuest(player, creature, action))
-                ChatHandler(player->GetSession()).SendSysMessage("This quest could not be accepted.");
+                ChatHandler(player->GetSession()).SendSysMessage(Text(player, TEXT_NOT_ACCEPTED));
         }
         else if (sender == ControlSender && action == AcceptAllAction && EnableAcceptAll)
         {
@@ -153,9 +209,9 @@ public:
                     ++accepted;
 
             if (accepted)
-                ChatHandler(player->GetSession()).PSendSysMessage("{} dungeon quests accepted.", accepted);
+                ChatHandler(player->GetSession()).PSendSysMessage(Text(player, TEXT_ACCEPTED_COUNT), accepted);
             else
-                ChatHandler(player->GetSession()).SendSysMessage("No dungeon quests could be accepted.");
+                ChatHandler(player->GetSession()).SendSysMessage(Text(player, TEXT_NONE_ACCEPTED));
         }
 
         ShowMenu(player, creature);

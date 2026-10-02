@@ -37,6 +37,12 @@ This is a convenience gossip NPC, not a native questgiver. There are no static q
 no automatic granting on dungeon entry, and no universal turn-ins. Complete and turn in quests through
 the original game NPCs.
 
+## Localization
+
+Menu entries and chat messages are available in English and Russian (ruRU), chosen by the client locale.
+Quest titles come from `quest_template_locale`, and the guide's ruRU name and subtitle are installed by
+`mod_dungeon_quest_guide_locale.sql`.
+
 ## Guide placement and appearance
 
 Entry **14999991** uses script **npc_dungeon_quest_guide**, neutral faction 35 and gossip-only NPC flags.
@@ -86,8 +92,9 @@ If your server disables automatic database updates, stop worldserver and use you
 client to execute these **complete files**, in this order, against the **world** database:
 
 1. `data/sql/db-world/base/mod_dungeon_quest_guide.sql`
-2. `data/sql/db-world/base/mod_dungeon_quest_override.sql`
-3. `data/sql/db-world/updates/mod_dungeon_quests_2026_09_11_01_release.sql`
+2. `data/sql/db-world/base/mod_dungeon_quest_guide_locale.sql`
+3. `data/sql/db-world/base/mod_dungeon_quest_override.sql`
+4. `data/sql/db-world/updates/mod_dungeon_quests_2026_09_11_01_release.sql`
 
 For example, `mysql -u YOUR_DB_USER -p YOUR_WORLD_DATABASE < FILE.sql` executes a file and prompts
 for the password. Substitute the actual path for `FILE.sql`; no SQL statements need to be copied
@@ -126,6 +133,7 @@ recorded it. With automatic updates disabled, also execute the override-table fi
 data/sql/db-world/
   base/
     mod_dungeon_quest_guide.sql
+    mod_dungeon_quest_guide_locale.sql
     mod_dungeon_quest_override.sql
   updates/
     mod_dungeon_quests_2026_09_11_01_release.sql
