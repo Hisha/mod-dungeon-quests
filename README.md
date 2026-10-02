@@ -24,7 +24,8 @@ establishes whether this player can accept a quest now.
   respects capacity and reports how many were accepted.
 - **Accept All**, **Goodbye**, **Previous page** and **Next page** retain ordinary chat icons.
 - Menus show up to 24 quests per page. Active quests disappear; abandoning a quest makes it available
-  again if the core permits it. Previously rewarded quests, including repeatables, remain hidden.
+  again if the core permits it. Rewarded one-time quests stay hidden; repeatables return once the core's
+  daily/weekly limits allow them, and pooled quests (dungeon dailies) are offered only while active.
 
 Quests whose starter stands inside the dungeon and runs a script on accept are left to that starter:
 escort and event quests (`SpecialFlags & 2`), starters with a `ScriptName`, and starters with a SmartAI
@@ -184,7 +185,6 @@ exceptional cases.
 
 - Discovery is evidence-based and can have false positives/negatives, especially with shared items
   and dynamically spawned objectives. It does not create prerequisite chains or replace original NPC scripts.
-- Previously rewarded repeatables remain hidden under the existing guide policy.
 - Starting-item inventory checks can produce normal core equip-error messages.
 - There are no guides for raids, and unused map 44 remains unresolved.
 - Check different entrances, normal/heroic visibility and local teleport differences against the manifest.

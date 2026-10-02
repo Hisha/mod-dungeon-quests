@@ -4,6 +4,7 @@
 #include "DungeonQuestMgr.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "PoolMgr.h"
 #include "QuestDef.h"
 #include "ScriptMgr.h"
 #include "ScriptedGossip.h"
@@ -32,9 +33,13 @@ bool IsGuideAvailable(Player* player, Creature* creature)
 Quest const* GetEligibleQuest(Player* player, uint32 questId)
 {
     Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
-    // IsQuestRewarded also covers previously rewarded repeatables, as requested.
-    // GetQuestRewardStatus alone deliberately does not cover those in the core.
-    if (!quest || player->GetQuestStatus(questId) != QUEST_STATUS_NONE || player->IsQuestRewarded(questId))
+    // GetQuestStatus reports rewarded one-time quests as REWARDED; repeatables
+    // return NONE and CanTakeQuest applies their daily/weekly limits.
+    if (!quest || player->GetQuestStatus(questId) != QUEST_STATUS_NONE)
+        return nullptr;
+
+    // Pooled quests (heroic/normal dungeon dailies) are offered only while active.
+    if (sPoolMgr->IsPartOfAPool<Quest>(questId) && !sPoolMgr->IsSpawnedObject<Quest>(questId))
         return nullptr;
 
     // Core authority for disabled quests, chains, conditions, class/race, level,
