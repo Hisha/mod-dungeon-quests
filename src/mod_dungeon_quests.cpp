@@ -120,7 +120,7 @@ private:
 };
 }
 
-void AddSC_DungeonQuests()
+void Addmod_dungeon_questsScripts()
 {
     new dungeon_quests_worldscript();
     new dungeon_quests_commandscript();
